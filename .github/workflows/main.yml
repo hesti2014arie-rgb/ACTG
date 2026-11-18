@@ -11,6 +11,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Kalau yang di-upload ke repo berupa ACTG.zip, ekstrak dulu.
+      # Kalau project sudah diekstrak (ada settings.gradle.kts), langkah ini dilewati.
+      - name: Unzip project (jika perlu)
+        id: locate
+        run: |
+          if [ -f settings.gradle.kts ]; then
+            echo "dir=." >> "$GITHUB_OUTPUT"
+          else
+            ZIP=$(find . -maxdepth 2 -iname 'ACTG*.zip' -not -path './.git/*' | head -n 1)
+            if [ -z "$ZIP" ]; then
+              echo "::error::Tidak ada settings.gradle.kts maupun file ACTG*.zip di repo"
+              exit 1
+            fi
+            echo "Mengekstrak $ZIP"
+            unzip -q -o "$ZIP" -d _extracted
+            SETTINGS=$(find _extracted -name settings.gradle.kts | head -n 1)
+            echo "dir=$(dirname "$SETTINGS")" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -21,10 +40,10 @@ jobs:
           gradle-version: 8.9
 
       - name: Build debug APK
+        working-directory: ${{ steps.locate.outputs.dir }}
         run: gradle assembleDebug --no-daemon
 
       - uses: actions/upload-artifact@v4
         with:
           name: ACTG-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
-          
+          path: ${{ steps.locate.outputs.dir }}/app/build/outputs/apk/debug/app-debug.apk
